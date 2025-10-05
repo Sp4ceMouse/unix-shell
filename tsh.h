@@ -1,3 +1,13 @@
+/*--------------------------------------------------*/
+//NAME:           Joseph Schneider
+//FILE:           tsh.h
+//CLASS:          CICS-377 Operating Systems
+//ASSIGNMENT:     Project_01 UNIX Shell
+//PROFESSOR:      Nikko
+//DATE COMPLETED: 09/29/2025
+//DATE DUE:       10/02/2025
+/*--------------------------------------------------*/
+
 #ifndef _SIMPLE_SHELL_H
 #define _SIMPLE_SHELL_H
 
