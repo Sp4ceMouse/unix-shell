@@ -1,3 +1,13 @@
+/*--------------------------------------------------*/
+//NAME:           Joseph Schneider
+//FILE:           tsh.cpp
+//CLASS:          CICS-377 Operating Systems
+//ASSIGNMENT:     Project_01 UNIX Shell
+//PROFESSOR:      Nikko
+//DATE COMPLETED: 09/29/2025
+//DATE DUE:       10/02/2025
+/*--------------------------------------------------*/
+
 #include <tsh.h>
 
 using namespace std;
@@ -78,8 +88,7 @@ void run() {
   char *input_line;
   bool is_quit = false;
 
-
-
+  //keep asking for input and running commands until user specifies quit
   while(!is_quit){
     display_prompt();
 
@@ -94,25 +103,10 @@ void run() {
     //clean newline
     sanitize(input_line);
 
-    //parse input
+    //parse input, split input into separate process objects
     parse_input(input_line, process_list);
 
-    /*
-    //----- FOR DEBUG -----/
-    //print input
-    for (const auto& process : process_list) {
-      if(isQuit(process)){
-        return;
-      }
-      for (int i = 0; i < process->tok_index; i++) {
-        cout << process->cmdTokens[i] << " ";
-      }
-      cout << "pipe in: " << process->pipe_in << " " << "pipe out: " << process->pipe_out << " ";
-      cout << endl;
-    }
-    //----- END FOR DEBUG -----/
-    */
-
+    //run all of the processes in the list, will return true if one of the processes is quit.
     is_quit = run_commands(process_list);
 
     //free memory
@@ -166,16 +160,19 @@ char *read_input() {
  * removes the new line char of the end in cmd.
  */
 void sanitize(char *cmd) {
+  //if passed string is null do nothing
   if (cmd == nullptr){
      return;
   }
 
   size_t len = strlen(cmd);
 
+  //empty string do nothing
   if (len == 0){
     return;
   }
 
+  //removing carriage returns from the end of the string making sure there isn't more than one
   while (len > 0 && (cmd[len-1] == '\n' || cmd[len-1] == '\r')) {
       cmd[len-1] = '\0';
       len--;
@@ -209,31 +206,46 @@ void sanitize(char *cmd) {
  * - The created Process objects are added to the process_list.
  */
 void parse_input(char *cmd, list<Process *> &process_list) {
-  int pipe_in_val = 0;
+
   Process *currProcess = nullptr;
 
   char tempToken[100];
+
   int idx = 0;
 
+  //used to track if the current process we are examining has a pipe in or pipe out
   bool pipe_in_flag = false;
   bool pipe_out_flag = false;
 
+  //used to distinguish if we are currently looking for a command or flags for a command. This will
+  //affect how we handle creating new processes.
   bool srch_for_cmd = true;
   bool srch_for_flg = false;
 
+  //used to check if we have found a usable character and not just leading spaces.
   bool tkn_found = false;
 
+  //going through each char in the input line passed.
   for (char *p = cmd;; p++) {
+    //end of file or end of input string
     if(*p == '\0'){
+      //making sure we have usable input and not just spaces
       if(tkn_found){
+        //make sure to terminate our current command or flag
         tempToken[idx] = '\0';
+        //if we do not already have a process created
         if (!currProcess) {
           currProcess = new Process(pipe_in_flag, pipe_out_flag);
         }
+        //adding our token to the current process
         currProcess->add_token(tempToken);
+        //resetting index and status flags
         idx = 0;
         tkn_found = false;
       }
+      //pushing process to command list. If we had no usable input while we encountered /0 then we 
+      //jump here and push the process without adding a token. Similary if we had no new process and
+      //no usable input then we will just break out of the loop.
       if(currProcess){
         process_list.push_back(currProcess);
         currProcess = nullptr;
@@ -249,7 +261,8 @@ void parse_input(char *cmd, list<Process *> &process_list) {
         currProcess->add_token(tempToken);
         idx = 0;
         tkn_found = false;
-
+        //if we hit a space while looking for command we want to make sure that we pick up any flags
+        //that the user added, so we have to set our search flags accordingly.
         if(srch_for_cmd){
           currProcess = new Process(pipe_in_flag, pipe_out_flag);
           srch_for_cmd = false;
@@ -275,6 +288,7 @@ void parse_input(char *cmd, list<Process *> &process_list) {
       srch_for_flg = false;
       pipe_in_flag = false;
     }
+    // we have to worry about our pipe flags here, making sure to set pipe out to true and pipe in to true
     else if(*p == '|'){
       if(tkn_found){
         tempToken[idx] = '\0';
@@ -294,6 +308,7 @@ void parse_input(char *cmd, list<Process *> &process_list) {
       srch_for_flg = false;
       pipe_in_flag = true;
     }
+    //here we found a usable ascii character that we want to record as part of a command or flag.
     else{
       tempToken[idx++] = *p;
       tkn_found = true;
@@ -307,6 +322,7 @@ void parse_input(char *cmd, list<Process *> &process_list) {
     }
   }
 }
+
 
 //----- done -----
 /**
@@ -325,13 +341,12 @@ void parse_input(char *cmd, list<Process *> &process_list) {
 bool isQuit(Process *p) {
   string firstCmd = p->cmdTokens[0];
   if (firstCmd == "quit") {
-      //cout << "quit requested... terminating process... have a nice day :)" << endl;
       return true;
   }
   return false;
 }
 
-
+//----- done -----
 /**
  * @brief Execute a list of commands using processes and pipes.
  *
@@ -381,21 +396,30 @@ bool isQuit(Process *p) {
  */
 bool run_commands(list<Process *> &command_list) {
   bool is_quit = false;
+
+  //not used in our implementation.
   int max_process = 0;
   int min_process = 0;
+
   int size = command_list.size();
+
+  //array for tracking child process ids
   pid_t pids[size];
+
   Process *prev = nullptr;
 
   int idx = 0;
-
+  
+  //parsing through the entire process list
   for (const auto& process : command_list) {
-
+    //if the current process is quit then break out of the loop and set is_quit flag
     if(isQuit(process)){
         is_quit = true;
         break; 
     }
 
+    //if the process has a pipe out then we need to make sure the next process has access to that pipe
+    //we pipe here before forking so that both child processes will have access to the pipe file descriptors.
     if(process->pipe_out){
         if(pipe(process->pipe_fd) < 0){
             cerr << "tsh: error in piping" << endl;
@@ -405,75 +429,83 @@ bool run_commands(list<Process *> &command_list) {
     }
 
     pid_t c_pid = fork();
-
+    
+    //error in forking
     if (c_pid == -1){
         cerr << "tsh: error in running command: " << process->cmdTokens[0] << endl;
         is_quit = true;
         break;
     }
 
-    else if (c_pid > 0){//parent
-      //close previous pipe immediately
-      if (prev != nullptr && prev->pipe_out) {
-        close(prev->pipe_fd[0]);
-        close(prev->pipe_fd[1]);
-      }
+    //parent process (our shell)
+    else if (c_pid > 0){
+        //add the childs process id to the pid list
+        pids[idx++] = c_pid;
 
-      if (process->pipe_out || (prev && prev->pipe_out)) {
-          //part of a pipeline wait later
-          pids[idx++] = c_pid;
-      } else {
-          //standalone command wait right away
+        //parent closes previous pipe after child is forked
+        if (prev != nullptr && prev->pipe_out) {
+            close(prev->pipe_fd[0]);
+            close(prev->pipe_fd[1]);
+        }
+
+        //if there is no pipe out that means our command should execute before other commands so in the parent
+        //we want to immediately wait for that child to process.
+        if (!process->pipe_out) {
           int status;
           waitpid(c_pid, &status, 0);
-      }
+          //make sure that the next process id will overwrite this process id in the pid list so we dont double wait
+          idx--;
+        }
 
-      prev = process;
+        //update previous process
+        prev = process;
     }
 
-    else {//child
-      //if there's input redirect it
+    //child process (our command)
+    else {
+      //if the command gets input from a pipe need to redirect it to STDIN
       if (process->pipe_in && prev != nullptr) {
           dup2(prev->pipe_fd[0], STDIN_FILENO);
       }
-  
-      //if there's output redirect it
+
+      //if the command send input through a pipe to another command need to redirect it to STDOUT
       if (process->pipe_out) {
           dup2(process->pipe_fd[1], STDOUT_FILENO);
       }
-  
-      //close all pipe fds this child has inherited
+
+      //no longer need access to any inhereted pipes so close all open file descriptors for them
       if (prev != nullptr && prev->pipe_out) {
           close(prev->pipe_fd[0]);
           close(prev->pipe_fd[1]);
       }
+
       if (process->pipe_out) {
           close(process->pipe_fd[0]);
           close(process->pipe_fd[1]);
       }
-  
+
+      //overwrite current process with code from specified command.
       execvp(process->cmdTokens[0], process->cmdTokens);
 
       //wont reach this unless error in execvp
       perror(process->cmdTokens[0]);
       exit(1);
   }
-  
 }
 
-//parent closes the last pipe if needed
-if (prev != nullptr && prev->pipe_out) {
-    close(prev->pipe_fd[0]);
-    close(prev->pipe_fd[1]);
-}
+  //parent closes the last pipe if needed
+  if (prev != nullptr && prev->pipe_out) {
+      close(prev->pipe_fd[0]);
+      close(prev->pipe_fd[1]);
+  }
 
-//wait for all children
-for (int i = 0; i < idx; ++i) {
-    int status;
-    waitpid(pids[i], &status, 0);
-}
+  //wait for all children
+  for (int i = 0; i < idx; ++i) {
+      int status;
+      waitpid(pids[i], &status, 0);
+  }
 
-return is_quit;
+  return is_quit;
 }
 
 //----- done -----
@@ -504,9 +536,12 @@ Process::~Process() {}
  * @param tok
  */
 void Process::add_token(char *tok) {
+  //buffer
   cmdTokens[tok_index] = new char[strlen(tok) + 1];
   strcpy(cmdTokens[tok_index], tok);
+  //increase index for next token
   tok_index++;
+  //terminate our list
   cmdTokens[tok_index] = nullptr;
 }
 
@@ -514,10 +549,25 @@ void Process::add_token(char *tok) {
 
 //----- FOR DEBUGGING -----//
 for (int i = 0; i < process->tok_index; i++) {
-  cout << process->cmdTokens[i] << " ";
+cout << process->cmdTokens[i] << " ";
 }
 cout << "pipe in: " << process->pipe_in << " " << "pipe out: " << process->pipe_out << " ";
 cout << endl;
 //----- END FOR DEBUGGING -----//
 
+//----- FOR DEBUG -----/
+//print input
+for (const auto& process : process_list) {
+if(isQuit(process)){
+return;
+}
+for (int i = 0; i < process->tok_index; i++) {
+cout << process->cmdTokens[i] << " ";
+}
+cout << "pipe in: " << process->pipe_in << " " << "pipe out: " << process->pipe_out << " ";
+cout << endl;
+}
+//----- END FOR DEBUG -----/
+
 */
+
